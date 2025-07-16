@@ -1,1 +1,1 @@
-# Spy search CLI# spy-search-cli
+# spy-search-cli
