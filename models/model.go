@@ -12,3 +12,11 @@ type LLM struct {
 type CompletionInterface interface {
 	Completion(p string) string // not sure if here should be a string
 }
+
+// Currently let's handle ollama and open router first
+type OllamaClient LLM
+
+// ollama completion logic
+func (o OllamaClient) Completion(p string) (string, error) {
+	return "", nil
+}
