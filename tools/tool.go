@@ -25,7 +25,11 @@ type ToolProperty struct {
 	Description string `json:"description"`
 }
 
-type ToolExecutionResult struct{}
+type ToolExecutionResult struct {
+	Result    string
+	Error     error
+	ErrorCode int
+}
 
 // a tool execute should be stateless
 //
