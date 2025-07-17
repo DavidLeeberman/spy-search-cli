@@ -4,10 +4,16 @@ package tools
 import (
 	"encoding/json"
 	"log/slog"
+	"spysearch/models"
 )
 
 // Thinking Tool
 type ThinkingTool Tool
+
+var ThinkingPrompt = `You are a software engineer agent. In order to hnadler complex tasks you would
+like to think deeply and figure out the root of the problem. Don't hesitate to think longer if you think it 
+is necesssary. You are given the following problem statement
+`
 
 func NewThinkingTool() ThinkingTool {
 	return ThinkingTool{
@@ -19,15 +25,19 @@ func NewThinkingTool() ThinkingTool {
 }
 
 // here can we actually not using any
-func (t ThinkingTool) ExecuteTool(args map[string]any) {
-	_, err := t.ParseArgs(args)
+func (t ThinkingTool) ExecuteTool(args map[string]any, model models.OllamaClient) (ToolExecutionResult, error) {
+
+	tkargs, err := t.parseArgs(args)
+
 	if err != nil {
-		// parsing handling
+		slog.Error(err.Error())
 	}
+
+	return ToolExecutionResult{}, nil
 }
 
 // parse Arguments
-func (t ThinkingTool) ParseArgs(args map[string]any) (*thinkingArgs, error) {
+func (t ThinkingTool) parseArgs(args map[string]any) (thinkingArgs, error) {
 	// we have to handle parsing the thinkign argument here
 
 	var tkargs thinkingArgs
@@ -40,7 +50,7 @@ func (t ThinkingTool) ParseArgs(args map[string]any) (*thinkingArgs, error) {
 
 	json.Unmarshal(data, &tkargs)
 
-	return &tkargs, err
+	return tkargs, err
 }
 
 // private thinking args
