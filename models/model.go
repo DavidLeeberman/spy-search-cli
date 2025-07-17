@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"spysearch/tools"
 )
 
 // here we first focusing on ollama at first version
@@ -37,6 +38,7 @@ type OllamaRequest struct {
 	Model    string       `json:"model"`
 	Messages []LLMMessage `json:"messages"`
 	Stream   bool         `json:"stream"`
+	Tools    []tools.Tool `json:"tools"`
 }
 
 type OllamaResponse struct {
@@ -47,7 +49,7 @@ type OllamaResponse struct {
 }
 
 // ollama completion logic the completion should be a tool call
-func (o OllamaClient) Completion(p string) (LLMMessage, error) {
+func (o OllamaClient) Completion(p string, tool []tools.Tool) (LLMMessage, error) {
 
 	message := LLMMessage{
 		Role:    "user",
@@ -57,16 +59,16 @@ func (o OllamaClient) Completion(p string) (LLMMessage, error) {
 	messages := append([]LLMMessage{}, message)
 
 	body, err := json.Marshal(OllamaRequest{
-		Model:    "llama3.2:1b",
+		Model:    "qwen2.5-coder:1.5b",
 		Messages: messages,
 		Stream:   false,
+		Tools:    tool,
 	})
 	if err != nil {
 		slog.Error("Marshal err")
 		slog.Error(err.Error())
 		panic("json handling failclea")
 	}
-	slog.Info(string(body))
 
 	r, err := http.NewRequest("POST", "http://localhost:11434/api/chat", bytes.NewBuffer(body))
 
@@ -89,3 +91,6 @@ func (o OllamaClient) Completion(p string) (LLMMessage, error) {
 
 	return ollamaresponse.Message, nil
 }
+
+// convert to Tool
+func (o OllamaClient) ToolHandling() {}
