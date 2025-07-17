@@ -51,7 +51,7 @@ func TestBashTool(t *testing.T) {
 	tk := tools.NewBashTool()
 
 	list_tool := append([]tools.Tool{}, tk.Tool)
-	r, err := (&models.OllamaClient{}).Completion("Please create a file name hello.py", list_tool)
+	r, err := (&models.OllamaClient{}).Completion("Help me to check which file has the TestBashTool function", list_tool)
 
 	if err != nil {
 		fmt.Println(err)

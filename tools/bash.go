@@ -58,3 +58,8 @@ func bashExecutor(args map[string]any) (ToolExecutionResult, error) {
 
 	return ToolExecutionResult{}, nil
 }
+
+type bashArgs struct {
+	Command string `json:"command"`
+	Restart bool   `json:"restart"`
+}

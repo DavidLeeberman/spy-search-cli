@@ -2,7 +2,7 @@ package tools
 
 // modify the code
 /*
-	modifier
+	modifier is a modify tool
 */
 
 type ModifyTool struct {
