@@ -7,7 +7,9 @@ import (
 )
 
 // Thinking Tool
-type ThinkingTool Tool
+type ThinkingTool struct {
+	Tool
+}
 
 // convert this to string template
 var ThinkingPrompt = `You are a software engineer agent. In order to hnadler complex tasks you would
@@ -17,8 +19,10 @@ is necesssary. You are given the following problem statement
 
 func NewThinkingTool() ThinkingTool {
 	return ThinkingTool{
-		ToolFunction: ToolFunction{},
-		Execute:      NewThinkingTool().ExecuteTool,
+		Tool{
+			ToolFunction: ToolFunction{},
+			Execute:      NewThinkingTool().ExecuteTool,
+		},
 	}
 }
 

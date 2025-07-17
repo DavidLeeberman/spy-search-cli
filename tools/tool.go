@@ -1,7 +1,6 @@
 package tools
 
 // here we provides an abstraction type of tool
-
 type Tool struct {
 	ToolFunction ToolFunction                                           `json:"function"`
 	Type         string                                                 `json:"type"`
