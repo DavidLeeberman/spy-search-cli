@@ -88,7 +88,6 @@ func (o OllamaClient) Completion(p string, tool []tools.Tool) (LLMMessage, error
 
 	var ollamaresponse OllamaResponse
 	err = json.Unmarshal([]byte(responsebody), &ollamaresponse)
-
 	return ollamaresponse.Message, nil
 }
 

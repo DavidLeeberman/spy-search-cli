@@ -12,24 +12,60 @@ type ThinkingTool struct {
 }
 
 // convert this to string template
-var ThinkingPrompt = `You are a software engineer agent. In order to hnadler complex tasks you would
-like to think deeply and figure out the root of the problem. Don't hesitate to think longer if you think it 
-is necesssary. You are given the following problem statement
+var thinkingPrompt = `In order to hnadler complex tasks you would like to think deeply and figure out the root of the problem. Don't hesitate to think longer if you think it 
+is necesssary. You are given the following problem statement. 
 `
 
 func NewThinkingTool() ThinkingTool {
+
+	// here we need to create a tool function , a tool parameter , a tool property
+
+	thinkingProperties := map[string]ToolProperty{}
+
+	tkingstep := ToolProperty{
+		Type:        "Interger",
+		Description: "Number of step that you think it takes to solve this problem. Minimial would be 1 and Maximum would be 25. Don't hesitate to make a large number if you think this task is difficult",
+	}
+
+	rethink := ToolProperty{
+		Type:        "boolean",
+		Description: "Do you think rethink for this step is necessary ?",
+	}
+
+	content := ToolProperty{
+		Type:        "string",
+		Description: "Your thinking process should be placed inside here.",
+	}
+
+	thinkingProperties["steps"] = tkingstep
+	thinkingProperties["rethink"] = rethink
+	thinkingProperties["content"] = content
+
+	thinkingParameter := ToolParameter{
+		Type:       "object",
+		Properties: thinkingProperties,
+		Required:   []string{},
+	}
+
+	thinkFunction := ToolFunction{
+		Name:        "thinking",
+		Description: thinkingPrompt,
+		Parameters:  thinkingParameter,
+	}
+
 	return ThinkingTool{
 		Tool{
-			ToolFunction: ToolFunction{},
-			Execute:      NewThinkingTool().ExecuteTool,
+			Type:         "function",
+			ToolFunction: thinkFunction,
+			Execute:      thinkingExecutor,
 		},
 	}
 }
 
 // here can we actually not using any
-func (t ThinkingTool) ExecuteTool(args map[string]any) (ToolExecutionResult, error) {
+func thinkingExecutor(args map[string]any) (ToolExecutionResult, error) {
 
-	_, err := t.parseArgs(args)
+	_, err := parseArgs(args)
 
 	if err != nil {
 		slog.Error(err.Error())
@@ -39,7 +75,7 @@ func (t ThinkingTool) ExecuteTool(args map[string]any) (ToolExecutionResult, err
 }
 
 // parse Arguments
-func (t ThinkingTool) parseArgs(args map[string]any) (thinkingArgs, error) {
+func parseArgs(args map[string]any) (thinkingArgs, error) {
 	// we have to handle parsing the thinkign argument here
 
 	var tkargs thinkingArgs

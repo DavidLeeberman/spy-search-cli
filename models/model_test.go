@@ -33,3 +33,11 @@ func TestOllamaCompletion(t *testing.T) {
 
 	models.OllamaClient{}.Completion("What is the weather today in Toronto? You are require to use tool", list_tool)
 }
+
+func TestThinkingTool(t *testing.T) {
+	tk := tools.NewThinkingTool()
+
+	list_tool := append([]tools.Tool{}, tk.Tool)
+	models.OllamaClient{}.Completion("Why my merge sort not working", list_tool)
+
+}

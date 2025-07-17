@@ -49,4 +49,6 @@ type ToolExecutionResult struct {
 			- each properties should have type description
 		- a list of requrie properties
 	One agent should have multiple set of tools
+
+	The execution function should be called after getting the tool call response
 */
