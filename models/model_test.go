@@ -1,9 +1,7 @@
 package models_test
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
 	"spysearch/models"
 	"spysearch/tools"
 	"testing"
@@ -54,19 +52,18 @@ func TestBashTool(t *testing.T) {
 	r, err := (&models.OllamaClient{}).Completion("Create a new file name test.txt", list_tool)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
-	msg, err := tools.ExtractResponse(r.Content)
+	toolResponse, err := tools.ExtractResponse(r.Content)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
-	var a tools.ToolResponse
-	// msg is already the JSON string, unmarshal it directly
-	if err := json.Unmarshal([]byte(msg), &a); err != nil {
-		fmt.Printf("Unmarshal error: %v\n", err)
-		fmt.Printf("Trying to unmarshal: %q\n", msg)
-		log.Fatal(err)
+	for i := range list_tool {
+		if list_tool[i].ToolFunction.Name == toolResponse.Name {
+			list_tool[i].Execute(toolResponse.Arguments)
+		}
 	}
-	fmt.Printf("%+v\n", a)
 }

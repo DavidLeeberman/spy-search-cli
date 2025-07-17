@@ -65,7 +65,7 @@ func NewThinkingTool() ThinkingTool {
 // here can we actually not using any
 func thinkingExecutor(args map[string]any) (ToolExecutionResult, error) {
 
-	_, err := parseArgs(args)
+	_, err := parsethinkingArgs(args)
 
 	if err != nil {
 		slog.Error(err.Error())
@@ -75,7 +75,7 @@ func thinkingExecutor(args map[string]any) (ToolExecutionResult, error) {
 }
 
 // parse Arguments
-func parseArgs(args map[string]any) (thinkingArgs, error) {
+func parsethinkingArgs(args map[string]any) (thinkingArgs, error) {
 	// we have to handle parsing the thinkign argument here
 
 	var tkargs thinkingArgs

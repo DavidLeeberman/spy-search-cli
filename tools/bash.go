@@ -1,8 +1,16 @@
 package tools
 
+import (
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"os/exec"
+)
+
 // this tool allows the agent to perform any kind of tool that can be run with bash
 // for example create new files it should use echo >> " " or use cat to peek the content
 
+// cite: ByteDance/TraeAgent
 var bashprompt = `
 "Run commands in a bash shell
 * When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
@@ -55,11 +63,34 @@ func NewBashTool() BashTool {
 }
 
 func bashExecutor(args map[string]any) (ToolExecutionResult, error) {
+	bashArgs, err := bashParseArgs(args)
+	if err != nil {
+		return ToolExecutionResult{}, nil
+	}
+
+	fmt.Printf("command %s \n", bashArgs.Command)
+	fmt.Printf("restart %t \n", bashArgs.Restart)
+
+	cmd := exec.Command(bashArgs.Command)
+	if err := cmd.Run(); err != nil {
+		return ToolExecutionResult{}, nil
+	}
 
 	return ToolExecutionResult{}, nil
 }
 
-type bashArgs struct {
+// TODO we need a better error handling system
+func bashParseArgs(args map[string]any) (BashArgs, error) {
+	var bashargs BashArgs
+	data, err := json.Marshal(args)
+	if err != nil {
+		slog.Error(err.Error())
+	}
+	json.Unmarshal(data, &bashargs)
+	return bashargs, err
+}
+
+type BashArgs struct {
 	Command string `json:"command"`
 	Restart bool   `json:"restart"`
 }

@@ -1,5 +1,11 @@
 package tools
 
+import (
+	"encoding/json"
+	"fmt"
+	"regexp"
+)
+
 // here we provides an abstraction type of tool
 type Tool struct {
 	ToolFunction ToolFunction                                           `json:"function"`
@@ -29,6 +35,40 @@ type ToolExecutionResult struct {
 	Result    string
 	Error     error
 	ErrorCode int
+}
+
+type ToolResponse struct {
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+// ExtractRawJSON extracts the raw JSON string from the response
+func ExtractRawJSON(res string) (string, error) {
+	pattern := "(?s)```json\\s*(.*?)\\s*```"
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", fmt.Errorf("failed to compile regex: %v", err)
+	}
+	matches := re.FindStringSubmatch(res)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("no JSON content found")
+	}
+	return matches[1], nil
+}
+
+// ExtractResponse extracts and parses the JSON response into a ToolResponse struct
+func ExtractResponse(res string) (*ToolResponse, error) {
+	jsonStr, err := ExtractRawJSON(res)
+	if err != nil {
+		return nil, err
+	}
+
+	var toolResponse ToolResponse
+	if err := json.Unmarshal([]byte(jsonStr), &toolResponse); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
+	}
+
+	return &toolResponse, nil
 }
 
 // a tool execute should be stateless
