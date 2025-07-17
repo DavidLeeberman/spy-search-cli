@@ -1,21 +1,29 @@
 package tools
 
-import "spysearch/models"
-
 // here we provides an abstraction type of tool
 
 type Tool struct {
-	Name        string                                                                            `json:"name"`
-	Description string                                                                            `json:"description"`
-	Parameters  ToolParameter                                                                     `json:"parameters"`
-	Type        string                                                                            `json:"type"`
-	Execute     func(args map[string]any, model models.OllamaClient) (ToolExecutionResult, error) // maybe an interface is not a good option
+	ToolFunction ToolFunction                                           `json:"function"`
+	Type         string                                                 `json:"type"`
+	Execute      func(args map[string]any) (ToolExecutionResult, error) `json:"-"` // maybe an interface is not a good option
+}
+
+type ToolFunction struct {
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	Parameters  ToolParameter `json:"parameters"`
 }
 
 // list of tool parameter
 type ToolParameter struct {
-	Properties map[string]any `json:"properties"`
-	Required   []string       `json:"required"`
+	Type       string                  `json:"type"`
+	Properties map[string]ToolProperty `json:"properties"`
+	Required   []string                `json:"required"`
+}
+
+type ToolProperty struct {
+	Type        string `json:"type"`
+	Description string `json:"description"`
 }
 
 type ToolExecutionResult struct{}

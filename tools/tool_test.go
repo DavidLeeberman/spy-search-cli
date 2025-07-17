@@ -15,7 +15,7 @@ func TestParseArgs(t *testing.T) {
 	mock_data["rethink"] = false
 	mock_data["content"] = "this is a test content"
 
-	err := tk.ExecuteTool(mock_data)
+	_, err := tk.ExecuteTool(mock_data)
 
 	if err != nil {
 		slog.Error(err.Error())
