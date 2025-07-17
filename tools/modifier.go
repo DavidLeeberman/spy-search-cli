@@ -3,7 +3,10 @@ package tools
 // modify the code
 /*
 	modifier is a modify tool that modify files
-	a modifier could have the following
+	a modifier could have the following tools
+
+		replace str
+
 */
 
 type ModifyTool struct {
