@@ -5,13 +5,13 @@ package tools
 type Tool struct {
 	Name        string                    `json:"name"`
 	Description string                    `json:"description"`
-	Parameters  []ToolParameter           `json:"parameters"`
+	Parameters  ToolParameter             `json:"parameters"`
+	Type        string                    `json:"type"`
 	Execute     func(args map[string]any) // maybe an interface is not a good option
 }
 
 // list of tool parameter
 type ToolParameter struct {
-	Type       string         `json:"type"`
 	Properties map[string]any `json:"properties"`
 	Required   []string       `json:"required"`
 }
