@@ -34,12 +34,18 @@ func NewThinkingTool() ThinkingTool {
 
 	content := ToolProperty{
 		Type:        "string",
-		Description: "Your thinking process should be placed inside here.",
+		Description: "Your thinking process should be placed inside here. For each thinkstep you mentioned. You should have one sentecne describe your thinking. Don't hesitate to geneerate more content",
+	}
+
+	summary := ToolProperty{
+		Type:        "string",
+		Description: "summarize the content you mentioned about to save into your memory",
 	}
 
 	thinkingProperties["steps"] = tkingstep
 	thinkingProperties["rethink"] = rethink
 	thinkingProperties["content"] = content
+	thinkingProperties["summary"] = summary
 
 	thinkingParameter := ToolParameter{
 		Type:       "object",
@@ -65,13 +71,23 @@ func NewThinkingTool() ThinkingTool {
 // here can we actually not using any
 func thinkingExecutor(args map[string]any) (ToolExecutionResult, error) {
 
-	_, err := parsethinkingArgs(args)
+	data, err := parsethinkingArgs(args)
 
 	if err != nil {
-		slog.Error(err.Error())
+		return ToolExecutionResult{
+			Result:    "Error: " + err.Error(),
+			Error:     err,
+			ErrorCode: 0,
+		}, err
 	}
 
-	return ToolExecutionResult{}, nil
+	result := ToolExecutionResult{
+		Result:    data.Content,
+		Error:     nil,
+		ErrorCode: 0,
+	}
+
+	return result, nil
 }
 
 // parse Arguments
@@ -96,4 +112,5 @@ type thinkingArgs struct {
 	Thinkingstep int    `json:"thinkingstep"`
 	Rethink      bool   `json:"rethink"`
 	Content      string `json:"content"` // the content here is the thinking process and shoudl save the the summary
+	Summary      string `json:"summary"`
 }

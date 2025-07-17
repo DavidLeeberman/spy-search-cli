@@ -73,10 +73,18 @@ func bashExecutor(args map[string]any) (ToolExecutionResult, error) {
 
 	cmd := exec.Command(bashArgs.Command)
 	if err := cmd.Run(); err != nil {
-		return ToolExecutionResult{}, nil
+		return ToolExecutionResult{
+			Result:    "Error " + err.Error(),
+			Error:     err,
+			ErrorCode: -1,
+		}, err
 	}
 
-	return ToolExecutionResult{}, nil
+	return ToolExecutionResult{
+		Result:    "Running Command " + bashArgs.Command + " successfully",
+		Error:     nil,
+		ErrorCode: 0,
+	}, nil
 }
 
 // TODO we need a better error handling system
