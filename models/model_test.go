@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"fmt"
 	"spysearch/models"
 	"spysearch/tools"
 	"testing"
@@ -31,13 +32,29 @@ func TestOllamaCompletion(t *testing.T) {
 
 	list_tool := append([]tools.Tool{}, mock_tool)
 
-	models.OllamaClient{}.Completion("What is the weather today in Toronto? You are require to use tool", list_tool)
+	m := models.OllamaClient{}
+	m.Completion("What is the weather today in Toronto? You are require to use tool", list_tool)
+	m.Completion("what did i ask ?", list_tool)
+	fmt.Println(m.Messages)
 }
 
 func TestThinkingTool(t *testing.T) {
 	tk := tools.NewThinkingTool()
 
 	list_tool := append([]tools.Tool{}, tk.Tool)
-	models.OllamaClient{}.Completion("Why my merge sort not working", list_tool)
+	(&models.OllamaClient{}).Completion("Why my merge sort not working", list_tool)
 
+}
+
+func TestBashTool(t *testing.T) {
+
+	tk := tools.NewBashTool()
+
+	list_tool := append([]tools.Tool{}, tk.Tool)
+	r, err := (&models.OllamaClient{}).Completion("Please create a file name hello.py", list_tool)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(r)
 }

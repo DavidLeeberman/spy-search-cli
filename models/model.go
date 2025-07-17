@@ -14,6 +14,8 @@ type LLM struct {
 	Model    string
 	apiKey   string
 	provider string
+
+	Messages []LLMMessage
 }
 
 // LLMMessage (maybe we shall split into seperate folder)
@@ -49,21 +51,22 @@ type OllamaResponse struct {
 }
 
 // ollama completion logic the completion should be a tool call
-func (o OllamaClient) Completion(p string, tool []tools.Tool) (LLMMessage, error) {
+func (o *OllamaClient) Completion(p string, tool []tools.Tool) (LLMMessage, error) {
 
 	message := LLMMessage{
 		Role:    "user",
 		Content: p,
 	}
 
-	messages := append([]LLMMessage{}, message)
+	o.Messages = append(o.Messages, message)
 
 	body, err := json.Marshal(OllamaRequest{
-		Model:    "qwen2.5-coder:1.5b",
-		Messages: messages,
+		Model:    "qwen2.5-coder:3b",
+		Messages: o.Messages,
 		Stream:   false,
 		Tools:    tool,
 	})
+
 	if err != nil {
 		slog.Error("Marshal err")
 		slog.Error(err.Error())
@@ -88,6 +91,9 @@ func (o OllamaClient) Completion(p string, tool []tools.Tool) (LLMMessage, error
 
 	var ollamaresponse OllamaResponse
 	err = json.Unmarshal([]byte(responsebody), &ollamaresponse)
+
+	o.Messages = append(o.Messages, ollamaresponse.Message)
+
 	return ollamaresponse.Message, nil
 }
 
