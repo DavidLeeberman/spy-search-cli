@@ -10,11 +10,13 @@ Like Gemini CLI, we don’t want to restrict users to specific IDEs like Cursor 
 
 Currently, we are in a rapid development phase, which means updates may vary greatly from day to day. However, here’s the general roadmap:
 
+### News:
+Spy search CLI v0.1 is finished ! 
+
 ### v0.1
-- [ ] Tool list
-- [ ] Agentic workflow
-- [ ] Basic CLI interface
-- [ ] ... additional tasks
+- [x] Tool list
+- [x] Agentic workflow
+- [x] Basic CLI interface
 
 ## Contribution
 
