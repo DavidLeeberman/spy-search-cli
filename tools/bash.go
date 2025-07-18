@@ -2,7 +2,6 @@ package tools
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"os/exec"
 )
@@ -67,9 +66,6 @@ func bashExecutor(args map[string]any) (ToolExecutionResult, error) {
 	if err != nil {
 		return ToolExecutionResult{}, nil
 	}
-
-	fmt.Printf("command %s \n", bashArgs.Command)
-	fmt.Printf("restart %t \n", bashArgs.Restart)
 
 	cmd := exec.Command(bashArgs.Command)
 	if err := cmd.Run(); err != nil {

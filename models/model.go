@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -95,6 +96,65 @@ func (o *OllamaClient) Completion(p string, tool []tools.Tool) (LLMMessage, erro
 	o.Messages = append(o.Messages, ollamaresponse.Message)
 
 	return ollamaresponse.Message, nil
+}
+
+// Streaming version of Completion
+func (o *OllamaClient) CompletionStream(p string, tool []tools.Tool, onChunk func(content string, done bool, toolCall map[string]interface{})) error {
+	message := LLMMessage{
+		Role:    "user",
+		Content: p,
+	}
+	o.Messages = append(o.Messages, message)
+
+	body, err := json.Marshal(OllamaRequest{
+		Model:    "qwen2.5-coder:3b",
+		Messages: o.Messages,
+		Stream:   true,
+		Tools:    tool,
+	})
+	if err != nil {
+		slog.Error("Marshal err")
+		slog.Error(err.Error())
+		return err
+	}
+
+	r, err := http.NewRequest("POST", "http://localhost:11434/api/chat", bytes.NewBuffer(body))
+	r.Header = map[string][]string{
+		"Content-Type": {"application/json"},
+	}
+
+	c := http.Client{}
+	res, err := c.Do(r)
+	if err != nil {
+		slog.Error(err.Error())
+		return err
+	}
+	defer res.Body.Close()
+
+	scanner := bufio.NewScanner(res.Body)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var chunk map[string]interface{}
+		if err := json.Unmarshal(line, &chunk); err != nil {
+			continue
+		}
+		// Extract content and tool call
+		msg, ok := chunk["message"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		content, _ := msg["content"].(string)
+		toolCall := msg["tool_calls"]
+		done, _ := chunk["done"].(bool)
+		onChunk(content, done, toolCall.(map[string]interface{}))
+		if done {
+			break
+		}
+	}
+	return nil
 }
 
 // convert to Tool
