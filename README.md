@@ -22,6 +22,8 @@ go run main.go
 
 Then you would see the CLI. We suggest using 7b model for little task and not suggest using small model unless for testing purpose.
 
+### Demo 
+![Image](./docs/demo.png)
 
 ## Versions & Roadmap
 
