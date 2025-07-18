@@ -2,11 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -14,15 +15,13 @@ import (
 
 const (
 	VIEW_CHAT = iota
-	VIEW_SETTINGS
-	VIEW_CODE_DIFF
-	VIEW_CODE_EDIT
+	VIEW_CODE_REVIEW
 )
 
-type codeBlock struct {
-	before string
-	after  string
-	file   string
+type codeChange struct {
+	filename string
+	before   string
+	after    string
 }
 
 type Model struct {
@@ -33,130 +32,95 @@ type Model struct {
 	textarea textarea.Model
 	messages []string
 
-	modelInput, apiKeyInput textinput.Model
-	settingsFocus           int
+	agentModel  string
+	agentAPIKey string
+	waiting     bool
 
-	codeDiff         codeBlock
-	diffViewport     viewport.Model
-	editTextarea     textarea.Model
-	horizontalScroll int
-
-	agentModel, agentAPIKey string
-	waitingForAgent         bool
+	// Code review state
+	currentChange codeChange
+	showingSteps  bool
+	steps         []string
+	currentStep   int
 }
 
-// Color scheme
+// Clean color scheme
 var (
-	primary   = lipgloss.Color("#00D4FF")
-	secondary = lipgloss.Color("#B47EFF")
-	accent    = lipgloss.Color("#FF7ED4")
-	text      = lipgloss.Color("#E0E0E0")
-	dim       = lipgloss.Color("#808080")
-	surface   = lipgloss.Color("#2a2a2a")
+	green  = lipgloss.Color("#00ff41")
+	cyan   = lipgloss.Color("#00ffff")
+	yellow = lipgloss.Color("#ffff00")
+	red    = lipgloss.Color("#ff0040")
+	gray   = lipgloss.Color("#666666")
+	white  = lipgloss.Color("#ffffff")
+	black  = lipgloss.Color("#000000")
 )
 
-// Styles
+// Clean styles
 var (
-	baseStyle = lipgloss.NewStyle().
+	promptStyle = lipgloss.NewStyle().
+			Foreground(green).
+			Bold(true)
+
+	agentStyle = lipgloss.NewStyle().
+			Foreground(cyan)
+
+	errorStyle = lipgloss.NewStyle().
+			Foreground(red).
+			Bold(true)
+
+	stepStyle = lipgloss.NewStyle().
+			Foreground(yellow)
+
+	dimStyle = lipgloss.NewStyle().
+			Foreground(gray)
+
+	codeBeforeStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#330000")).
+			Foreground(white).
+			Padding(1).
 			Border(lipgloss.RoundedBorder()).
-			Padding(1, 2)
+			BorderForeground(red)
 
-	logoStyle = lipgloss.NewStyle().
-			Foreground(primary).
-			Bold(true).
-			Align(lipgloss.Center).
+	codeAfterStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#003300")).
+			Foreground(white).
+			Padding(1).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(primary).
-			Padding(1, 2).
-			MarginBottom(1)
+			BorderForeground(green)
 
-	chatStyle     = baseStyle.Copy().BorderForeground(primary).Background(surface)
-	settingsStyle = baseStyle.Copy().BorderForeground(secondary).Background(surface)
-	inputStyle    = baseStyle.Copy().BorderForeground(primary).Background(surface).Padding(0, 1)
-	focusStyle    = baseStyle.Copy().BorderForeground(accent).Background(surface).Padding(0, 1)
-
-	userStyle      = lipgloss.NewStyle().Foreground(primary).Bold(true)
-	agentStyle     = lipgloss.NewStyle().Foreground(secondary)
-	systemStyle    = lipgloss.NewStyle().Foreground(accent).Italic(true)
-	statusStyle    = lipgloss.NewStyle().Foreground(dim).Italic(true)
-	helpStyle      = lipgloss.NewStyle().Foreground(dim).Align(lipgloss.Center)
-	secondaryStyle = lipgloss.NewStyle().Foreground(secondary)
-
-	diffBeforeStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#2d1b1b")).
-			Foreground(lipgloss.Color("#ffb3b3")).
-			Padding(1, 2).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#cc6666")).
-			Width(40)
-
-	diffAfterStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#1b2d1b")).
-			Foreground(lipgloss.Color("#b3ffb3")).
-			Padding(1, 2).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#66cc66")).
-			Width(40)
-
-	diffHeaderStyle = lipgloss.NewStyle().
-			Foreground(secondary).
-			Bold(true).
-			Align(lipgloss.Center).
-			Width(40)
+	headerStyle = lipgloss.NewStyle().
+			Foreground(white).
+			Background(gray).
+			Padding(0, 1).
+			Bold(true)
 )
-
-const spyLogo = `
-  ____  ____  _   _     ____  _____    _    ____   ____ _   _ 
- / ___||  _ \| \ | |   / ___|| ____|  / \  |  _ \ / ___| | | |
- \___ \| |_) |  \| |   \___ \|  _|   / _ \ | |_) | |   | |_| |
-  ___) |  __/| |\  |    ___) | |___ / ___ \|  _ <| |___|  _  |
- |____/|_|   |_| \_|   |____/|_____/_/   \_\_| \_\\____|_| |_|
-                                                              
-        Advanced SWE Agent Terminal v2.0`
 
 func NewModel() Model {
 	ta := textarea.New()
-	ta.Placeholder = "Type your message here..."
+	ta.Placeholder = "Enter command..."
 	ta.Focus()
-	ta.CharLimit = 2000
-	ta.SetWidth(70)
-	ta.SetHeight(3)
+	ta.CharLimit = 4000
+	ta.SetWidth(80)
+	ta.SetHeight(2)
 	ta.ShowLineNumbers = false
 	ta.KeyMap.InsertNewline.SetEnabled(false)
 
-	vp := viewport.New(70, 8)
-	vp.SetContent(systemStyle.Render("SYSTEM") + ": Welcome to SPY SEARCH\n\nCommands:\n• Type to chat\n• \\agent {prompt} to call agent\n• Tab for settings\n• Ctrl+C to quit")
+	vp := viewport.New(80, 20)
 
-	modelInput := textinput.New()
-	modelInput.Placeholder = "Ollama"
-	modelInput.CharLimit = 50
-	modelInput.Width = 25
-
-	apiKeyInput := textinput.New()
-	apiKeyInput.Placeholder = "Enter API key"
-	apiKeyInput.CharLimit = 100
-	apiKeyInput.Width = 40
-	apiKeyInput.EchoMode = textinput.EchoPassword
-
-	editTA := textarea.New()
-	editTA.SetWidth(70)
-	editTA.SetHeight(15)
-	editTA.ShowLineNumbers = true
+	welcome := agentStyle.Render("AGENT") + ": Ready\n" +
+		dimStyle.Render("Usage: \\agent {your prompt here}")
 
 	return Model{
-		view:             VIEW_CHAT,
-		viewport:         vp,
-		textarea:         ta,
-		modelInput:       modelInput,
-		apiKeyInput:      apiKeyInput,
-		diffViewport:     viewport.New(70, 8),
-		editTextarea:     editTA,
-		horizontalScroll: 0,
-		agentModel:       "gpt-4",
+		view:        VIEW_CHAT,
+		viewport:    vp,
+		textarea:    ta,
+		messages:    []string{welcome},
+		agentModel:  "gpt-4",
+		agentAPIKey: os.Getenv("OPENAI_API_KEY"),
 	}
 }
 
 func (m Model) Init() tea.Cmd {
+	m.updateViewport()
 	return textarea.Blink
 }
 
@@ -167,26 +131,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeComponents()
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
-	case agentResponseMsg:
-		return m.handleAgentResponse(msg)
+	case agentStepMsg:
+		return m.handleAgentStep(msg)
+	case agentCodeMsg:
+		return m.handleAgentCode(msg)
+	case editorCompleteMsg:
+		return m.handleEditorComplete(msg)
 	}
 
-	return m.updateComponents(msg)
+	var cmd tea.Cmd
+	if m.view == VIEW_CHAT {
+		m.textarea, cmd = m.textarea.Update(msg)
+	}
+	return m, cmd
 }
 
 func (m *Model) resizeComponents() {
-	if m.width > 80 {
-		w := m.width - 20
+	w := m.width - 4
+	h := m.height - 6
+
+	if w > 20 {
 		m.viewport.Width = w
 		m.textarea.SetWidth(w)
-		m.diffViewport.Width = w
-		m.editTextarea.SetWidth(w)
 	}
-	if m.height > 25 {
-		h := m.height - 17
+	if h > 5 {
 		m.viewport.Height = h
-		m.diffViewport.Height = h
-		m.editTextarea.SetHeight(h)
 	}
 }
 
@@ -194,53 +163,30 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-	case "tab":
-		return m.handleTabKey()
 	case "esc":
-		return m.handleEscKey()
+		if m.view == VIEW_CODE_REVIEW {
+			m.view = VIEW_CHAT
+			m.textarea.Focus()
+		}
+		return m, nil
 	}
 
 	switch m.view {
 	case VIEW_CHAT:
-		return m.updateChat(msg)
-	case VIEW_SETTINGS:
-		return m.updateSettings(msg)
-	case VIEW_CODE_DIFF:
-		return m.updateCodeDiff(msg)
-	case VIEW_CODE_EDIT:
-		return m.updateCodeEdit(msg)
+		return m.handleChatKeys(msg)
+	case VIEW_CODE_REVIEW:
+		return m.handleCodeReviewKeys(msg)
 	}
 
 	return m, nil
 }
 
-func (m Model) handleTabKey() (tea.Model, tea.Cmd) {
-	if m.view == VIEW_CHAT {
-		m.view = VIEW_SETTINGS
-		m.modelInput.Focus()
-		m.textarea.Blur()
-	} else if m.view == VIEW_SETTINGS {
-		m.view = VIEW_CHAT
-		m.textarea.Focus()
-		m.modelInput.Blur()
-		m.apiKeyInput.Blur()
-	}
-	return m, nil
-}
-
-func (m Model) handleEscKey() (tea.Model, tea.Cmd) {
-	if m.view == VIEW_CODE_DIFF || m.view == VIEW_CODE_EDIT {
-		m.view = VIEW_CHAT
-		m.textarea.Focus()
-		m.editTextarea.Blur()
-		m.horizontalScroll = 0
-	}
-	return m, nil
-}
-
-func (m Model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "enter" && m.textarea.Value() != "" {
-		return m.processUserInput()
+func (m Model) handleChatKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		if m.textarea.Value() != "" {
+			return m.processInput()
+		}
 	}
 
 	var cmd tea.Cmd
@@ -248,352 +194,273 @@ func (m Model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) processUserInput() (tea.Model, tea.Cmd) {
-	userMsg := strings.TrimSpace(m.textarea.Value())
-	m.messages = append(m.messages, userStyle.Render("YOU")+": "+userMsg)
-	m.updateChatViewport()
-	m.textarea.Reset()
-
-	if after, ok := strings.CutPrefix(userMsg, "\\agent "); ok {
-		m.waitingForAgent = true
-		m.messages = append(m.messages, statusStyle.Render("Agent processing..."))
-		m.updateChatViewport()
-		return m, m.callAgent(strings.TrimSpace(after))
+func (m Model) handleCodeReviewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "a", "A":
+		// Accept changes
+		m.messages = append(m.messages, agentStyle.Render("AGENT")+": Changes accepted")
+		m.updateViewport()
+		m.view = VIEW_CHAT
+		m.textarea.Focus()
+		return m, nil
+	case "e", "E":
+		// Edit with vim
+		return m, m.openEditor()
+	case "d", "D":
+		// Decline changes
+		m.messages = append(m.messages, agentStyle.Render("AGENT")+": Changes declined")
+		m.updateViewport()
+		m.view = VIEW_CHAT
+		m.textarea.Focus()
+		return m, nil
 	}
-
-	m.messages = append(m.messages, systemStyle.Render("SYSTEM")+": Use \\agent {prompt} to interact with agent.")
-	m.updateChatViewport()
 	return m, nil
 }
 
-func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "enter", "up", "down":
-		m.settingsFocus = 1 - m.settingsFocus
-		if m.settingsFocus == 0 {
-			m.apiKeyInput.Blur()
-			m.modelInput.Focus()
-		} else {
-			m.modelInput.Blur()
-			m.apiKeyInput.Focus()
+func (m Model) processInput() (tea.Model, tea.Cmd) {
+	input := strings.TrimSpace(m.textarea.Value())
+	m.messages = append(m.messages, promptStyle.Render("YOU")+": "+input)
+	m.updateViewport()
+	m.textarea.Reset()
+
+	// Check if it's an agent command
+	if strings.HasPrefix(input, "\\agent ") {
+		prompt := strings.TrimSpace(input[7:])
+		if prompt != "" {
+			m.waiting = true
+			m.showingSteps = true
+			m.steps = []string{}
+			m.currentStep = 0
+
+			m.messages = append(m.messages, agentStyle.Render("AGENT")+": Processing...")
+			m.updateViewport()
+
+			return m, m.callAgent(prompt)
 		}
-	case "ctrl+s":
-		return m.saveSettings()
 	}
 
-	var cmd tea.Cmd
-	if m.settingsFocus == 0 {
-		m.modelInput, cmd = m.modelInput.Update(msg)
-	} else {
-		m.apiKeyInput, cmd = m.apiKeyInput.Update(msg)
+	// Handle other commands
+	switch input {
+	case "clear":
+		m.messages = []string{}
+		m.updateViewport()
+	case "help":
+		help := `Commands:
+  \\agent {prompt}  - Send prompt to AI agent
+  clear           - Clear screen
+  help            - Show this help
+  
+Code Review:
+  A - Accept changes
+  E - Edit with vim
+  D - Decline changes
+  ESC - Back to chat`
+		m.messages = append(m.messages, agentStyle.Render("HELP")+": "+help)
+		m.updateViewport()
+	default:
+		m.messages = append(m.messages, errorStyle.Render("ERROR")+": Unknown command. Use \\agent {prompt} or 'help'")
+		m.updateViewport()
 	}
-	return m, cmd
+
+	return m, nil
 }
 
-func (m Model) saveSettings() (tea.Model, tea.Cmd) {
-	m.agentModel = m.modelInput.Value()
-	if m.agentModel == "" {
-		m.agentModel = "gpt-4"
+func (m *Model) updateViewport() {
+	content := strings.Join(m.messages, "\n")
+	m.viewport.SetContent(content)
+	m.viewport.GotoBottom()
+}
+
+// Agent message types
+type agentStepMsg struct {
+	step string
+}
+
+type agentCodeMsg struct {
+	filename string
+	before   string
+	after    string
+}
+
+type editorCompleteMsg struct {
+	success bool
+	message string
+}
+
+func (m Model) callAgent(prompt string) tea.Cmd {
+	return tea.Sequence(
+		// Step 1: Analysis
+		tea.Tick(time.Millisecond*800, func(t time.Time) tea.Msg {
+			return agentStepMsg{step: "1. Analyzing request..."}
+		}),
+		// Step 2: Planning
+		tea.Tick(time.Millisecond*1600, func(t time.Time) tea.Msg {
+			return agentStepMsg{step: "2. Planning solution..."}
+		}),
+		// Step 3: Implementation
+		tea.Tick(time.Millisecond*2400, func(t time.Time) tea.Msg {
+			return agentStepMsg{step: "3. Generating code..."}
+		}),
+		// Final result
+		tea.Tick(time.Millisecond*3200, func(t time.Time) tea.Msg {
+			// Mock code generation based on prompt
+			if strings.Contains(strings.ToLower(prompt), "function") ||
+				strings.Contains(strings.ToLower(prompt), "code") ||
+				strings.Contains(strings.ToLower(prompt), "fix") {
+				return agentCodeMsg{
+					filename: "main.go",
+					before: `func processData(data string) error {
+    if data == "" {
+        return nil
+    }
+    return process(data)
+}`,
+					after: `func processData(data string) error {
+    if data == "" {
+        return errors.New("empty data not allowed")
+    }
+    
+    if err := validate(data); err != nil {
+        return fmt.Errorf("validation failed: %w", err)
+    }
+    
+    return process(data)
+}`,
+				}
+			}
+			return agentStepMsg{step: "Complete: " + prompt}
+		}),
+	)
+}
+
+func (m Model) handleAgentStep(msg agentStepMsg) (tea.Model, tea.Cmd) {
+	if m.showingSteps {
+		// Replace the "Processing..." message with steps
+		if len(m.messages) > 0 && strings.Contains(m.messages[len(m.messages)-1], "Processing...") {
+			m.messages = m.messages[:len(m.messages)-1]
+			m.showingSteps = false
+		}
 	}
-	m.agentAPIKey = m.apiKeyInput.Value()
-	m.messages = append(m.messages, systemStyle.Render("SYSTEM")+": Configuration saved")
-	m.updateChatViewport()
+
+	m.messages = append(m.messages, stepStyle.Render("STEP")+": "+msg.step)
+	m.updateViewport()
+	return m, nil
+}
+
+func (m Model) handleAgentCode(msg agentCodeMsg) (tea.Model, tea.Cmd) {
+	m.waiting = false
+	m.currentChange = codeChange{
+		filename: msg.filename,
+		before:   msg.before,
+		after:    msg.after,
+	}
+
+	m.messages = append(m.messages, agentStyle.Render("AGENT")+": Code changes ready for review")
+	m.updateViewport()
+
+	m.view = VIEW_CODE_REVIEW
+	m.textarea.Blur()
+
+	return m, nil
+}
+
+func (m Model) openEditor() tea.Cmd {
+	// Create temporary file with the "after" code
+	tmpFile := "/tmp/agent_edit_" + fmt.Sprintf("%d", time.Now().Unix()) + ".go"
+
+	return tea.Sequence(
+		tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+			err := os.WriteFile(tmpFile, []byte(m.currentChange.after), 0644)
+			if err != nil {
+				return editorCompleteMsg{success: false, message: "Failed to create temp file"}
+			}
+			return nil
+		}),
+		tea.ExecProcess(exec.Command("vim", tmpFile), func(err error) tea.Msg {
+			if err != nil {
+				return editorCompleteMsg{success: false, message: "Editor failed: " + err.Error()}
+			}
+
+			// Read the modified content
+			_, readErr := os.ReadFile(tmpFile)
+			if readErr != nil {
+				return editorCompleteMsg{success: false, message: "Failed to read edited file"}
+			}
+
+			// Clean up temp file
+			os.Remove(tmpFile)
+
+			return editorCompleteMsg{success: true, message: "File edited successfully"}
+		}),
+	)
+}
+
+func (m Model) handleEditorComplete(msg editorCompleteMsg) (tea.Model, tea.Cmd) {
+	if msg.success {
+		m.messages = append(m.messages, agentStyle.Render("AGENT")+": "+msg.message)
+	} else {
+		m.messages = append(m.messages, errorStyle.Render("ERROR")+": "+msg.message)
+	}
+	m.updateViewport()
+
 	m.view = VIEW_CHAT
 	m.textarea.Focus()
 	return m, nil
 }
 
-func (m Model) updateCodeDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "left", "h":
-		if m.horizontalScroll > 0 {
-			m.horizontalScroll--
-			m.updateDiffViewport()
-		}
-	case "right", "l":
-		m.horizontalScroll++
-		m.updateDiffViewport()
-	case "y", "Y":
-		m.messages = append(m.messages, agentStyle.Render("AGENT")+": Changes accepted and applied.")
-		m.updateChatViewport()
-		m.view = VIEW_CHAT
-		m.textarea.Focus()
-		m.horizontalScroll = 0
-	case "e", "E":
-		m.editTextarea.SetValue(m.codeDiff.after)
-		m.editTextarea.Focus()
-		m.view = VIEW_CODE_EDIT
-	case "n", "N":
-		m.messages = append(m.messages, agentStyle.Render("AGENT")+": Changes rejected.")
-		m.updateChatViewport()
-		m.view = VIEW_CHAT
-		m.textarea.Focus()
-		m.horizontalScroll = 0
-	}
-
-	var cmd tea.Cmd
-	m.diffViewport, cmd = m.diffViewport.Update(msg)
-	return m, cmd
-}
-
-func (m Model) updateCodeEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+s":
-		m.codeDiff.after = m.editTextarea.Value()
-		m.updateDiffViewport()
-		m.view = VIEW_CODE_DIFF
-		m.editTextarea.Blur()
-	case "j":
-		if !m.editTextarea.Focused() {
-			m.editTextarea.CursorDown()
-			return m, nil
-		}
-	case "k":
-		if !m.editTextarea.Focused() {
-			m.editTextarea.CursorUp()
-			return m, nil
-		}
-	case "h":
-		if !m.editTextarea.Focused() {
-			m.editTextarea.KeyMap.CharacterBackward.SetEnabled(true)
-			m.editTextarea, _ = m.editTextarea.Update(tea.KeyMsg{Type: tea.KeyLeft})
-			return m, nil
-		}
-	case "l":
-		if !m.editTextarea.Focused() {
-			m.editTextarea.KeyMap.CharacterForward.SetEnabled(true)
-			m.editTextarea, _ = m.editTextarea.Update(tea.KeyMsg{Type: tea.KeyRight})
-			return m, nil
-		}
-	case "i":
-		if !m.editTextarea.Focused() {
-			m.editTextarea.Focus()
-			return m, nil
-		}
-	}
-
-	var cmd tea.Cmd
-	m.editTextarea, cmd = m.editTextarea.Update(msg)
-	return m, cmd
-}
-
-func (m Model) updateComponents(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
-	viewport, cmd := m.viewport.Update(msg)
-	m.viewport = viewport
-	cmds = append(cmds, cmd)
-
-	textarea, cmd := m.textarea.Update(msg)
-	m.textarea = textarea
-	cmds = append(cmds, cmd)
-
-	diffViewport, cmd := m.diffViewport.Update(msg)
-	m.diffViewport = diffViewport
-	cmds = append(cmds, cmd)
-
-	editTextarea, cmd := m.editTextarea.Update(msg)
-	m.editTextarea = editTextarea
-	cmds = append(cmds, cmd)
-
-	return m, tea.Batch(cmds...)
-}
-
-func (m *Model) updateChatViewport() {
-	m.viewport.SetContent(strings.Join(m.messages, "\n\n"))
-	m.viewport.GotoBottom()
-}
-
-type agentResponseMsg struct {
-	message    string
-	isCodeDiff bool
-	codeDiff   codeBlock
-}
-
-func (m Model) callAgent(prompt string) tea.Cmd {
-	return tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
-		if strings.Contains(strings.ToLower(prompt), "code") || strings.Contains(strings.ToLower(prompt), "fix") {
-			return agentResponseMsg{
-				message:    "Code analysis complete. Review changes:",
-				isCodeDiff: true,
-				codeDiff: codeBlock{
-					file:   "main.go",
-					before: "func processData(data string) error {\n    if data == \"\" {\n        return nil\n    }\n    return process(data)\n}",
-					after:  "func processData(data string) error {\n    if data == \"\" {\n        return errors.New(\"empty data\")\n    }\n    if err := validate(data); err != nil {\n        return err\n    }\n    return process(data)\n}",
-				},
-			}
-		}
-		return agentResponseMsg{
-			message: fmt.Sprintf("Processing: %s\n\nAnalysis complete. Ready for implementation.", prompt),
-		}
-	})
-}
-
-func (m Model) handleAgentResponse(msg agentResponseMsg) (tea.Model, tea.Cmd) {
-	m.waitingForAgent = false
-	m.messages = append(m.messages, agentStyle.Render("AGENT")+": "+msg.message)
-	m.updateChatViewport()
-
-	if msg.isCodeDiff {
-		m.codeDiff = msg.codeDiff
-		m.view = VIEW_CODE_DIFF
-		m.horizontalScroll = 0
-		m.updateDiffViewport()
-	}
-
-	return m, nil
-}
-
-func (m *Model) updateDiffViewport() {
-	// Split code into lines for horizontal scrolling
-	beforeLines := strings.Split(m.codeDiff.before, "\n")
-	afterLines := strings.Split(m.codeDiff.after, "\n")
-
-	// Calculate visible lines based on scroll position
-	viewWidth := 35 // Adjust based on available space
-
-	var visibleBefore, visibleAfter []string
-
-	for _, line := range beforeLines {
-		if len(line) > m.horizontalScroll {
-			if len(line) > m.horizontalScroll+viewWidth {
-				visibleBefore = append(visibleBefore, line[m.horizontalScroll:m.horizontalScroll+viewWidth])
-			} else {
-				visibleBefore = append(visibleBefore, line[m.horizontalScroll:])
-			}
-		} else {
-			visibleBefore = append(visibleBefore, "")
-		}
-	}
-
-	for _, line := range afterLines {
-		if len(line) > m.horizontalScroll {
-			if len(line) > m.horizontalScroll+viewWidth {
-				visibleAfter = append(visibleAfter, line[m.horizontalScroll:m.horizontalScroll+viewWidth])
-			} else {
-				visibleAfter = append(visibleAfter, line[m.horizontalScroll:])
-			}
-		} else {
-			visibleAfter = append(visibleAfter, "")
-		}
-	}
-
-	beforeContent := strings.Join(visibleBefore, "\n")
-	afterContent := strings.Join(visibleAfter, "\n")
-
-	beforeSection := lipgloss.JoinVertical(lipgloss.Left,
-		diffHeaderStyle.Render("BEFORE"),
-		diffBeforeStyle.Render(beforeContent))
-
-	afterSection := lipgloss.JoinVertical(lipgloss.Left,
-		diffHeaderStyle.Render("AFTER"),
-		diffAfterStyle.Render(afterContent))
-
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		fmt.Sprintf("File: %s (scroll: %d)", m.codeDiff.file, m.horizontalScroll),
-		"",
-		lipgloss.JoinHorizontal(lipgloss.Top, beforeSection, "  ", afterSection),
-		"",
-		helpStyle.Render("← → / h l: Scroll | Y: Accept | E: Edit | N: Reject | ESC: Cancel"))
-
-	m.diffViewport.SetContent(content)
-}
-
 func (m Model) View() string {
-	// Calculate logo width based on terminal width
-	logoWidth := min(m.width-6, 70)
-	if logoWidth < 50 {
-		logoWidth = 50
-	}
-
-	header := logoStyle.Width(logoWidth).Render(spyLogo)
-
 	switch m.view {
 	case VIEW_CHAT:
-		return m.chatView(header)
-	case VIEW_SETTINGS:
-		return m.settingsView(header)
-	case VIEW_CODE_DIFF:
-		return m.codeDiffView(header)
-	case VIEW_CODE_EDIT:
-		return m.codeEditView(header)
+		return m.chatView()
+	case VIEW_CODE_REVIEW:
+		return m.codeReviewView()
 	}
-
-	return header
+	return ""
 }
 
-func (m Model) chatView(header string) string {
-	apiStatus := "Not configured"
+func (m Model) chatView() string {
+	status := fmt.Sprintf("Model: %s", m.agentModel)
 	if m.agentAPIKey != "" {
-		apiStatus = "Configured"
-	}
-
-	status := statusStyle.Render(fmt.Sprintf("Model: %s | API: %s", m.agentModel, apiStatus))
-
-	if m.waitingForAgent {
-		status = statusStyle.Render("Agent processing...")
-	}
-
-	return lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		"",
-		status,
-		"",
-		chatStyle.Width(m.width-6).Render(m.viewport.View()),
-		"",
-		inputStyle.Width(m.width-6).Render(m.textarea.View()),
-		"",
-		helpStyle.Render("Tab: Settings | Ctrl+C: Quit | \\agent {prompt}: Call Agent"))
-}
-
-func (m Model) settingsView(header string) string {
-	modelSection := "Model:\n"
-	if m.settingsFocus == 0 {
-		modelSection += focusStyle.Render(m.modelInput.View())
+		status += " | API: OK"
 	} else {
-		modelSection += m.modelInput.View()
+		status += " | API: Not configured"
 	}
 
-	apiSection := "\nAPI Key:\n"
-	if m.settingsFocus == 1 {
-		apiSection += focusStyle.Render(m.apiKeyInput.View())
-	} else {
-		apiSection += m.apiKeyInput.View()
+	if m.waiting {
+		status += " | Processing..."
 	}
 
-	settings := modelSection + apiSection + "\n\n" + helpStyle.Render("Enter/Up/Down: Navigate | Ctrl+S: Save | Tab: Chat")
-
 	return lipgloss.JoinVertical(lipgloss.Left,
-		header,
+		headerStyle.Width(m.width).Render("SPY AGENT"),
+		dimStyle.Render(status),
 		"",
-		settingsStyle.Width(m.width-6).Render(settings))
+		m.viewport.View(),
+		"",
+		m.textarea.View(),
+		"",
+		dimStyle.Render("\\agent {prompt} | help | clear | Ctrl+C: quit"))
 }
 
-func (m Model) codeDiffView(header string) string {
-	return lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		"",
-		secondaryStyle.Render("CODE REVIEW"),
-		"",
-		m.diffViewport.View())
-}
+func (m Model) codeReviewView() string {
+	beforeSection := lipgloss.JoinVertical(lipgloss.Left,
+		headerStyle.Width(40).Render("BEFORE"),
+		codeBeforeStyle.Width(40).Render(m.currentChange.before))
 
-func (m Model) codeEditView(header string) string {
-	return lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		"",
-		secondaryStyle.Render("CODE EDITOR"),
-		"",
-		inputStyle.Width(m.width-6).Render(m.editTextarea.View()),
-		"",
-		helpStyle.Render("Ctrl+S: Save | ESC: Cancel | vim keys: hjkl | i: Insert mode"))
-}
+	afterSection := lipgloss.JoinVertical(lipgloss.Left,
+		headerStyle.Width(40).Render("AFTER"),
+		codeAfterStyle.Width(40).Render(m.currentChange.after))
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	diff := lipgloss.JoinHorizontal(lipgloss.Top,
+		beforeSection,
+		"  ",
+		afterSection)
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		headerStyle.Width(m.width).Render("CODE REVIEW: "+m.currentChange.filename),
+		"",
+		diff,
+		"",
+		dimStyle.Render("A: Accept | E: Edit | D: Decline | ESC: Back"))
 }
 
 func Run() error {
