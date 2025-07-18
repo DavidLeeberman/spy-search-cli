@@ -18,6 +18,11 @@ Spy search CLI v0.1 is finished !
 - [x] Agentic workflow
 - [x] Basic CLI interface
 
+### v0.2 
+- [] multi-debate framework
+- [] more tools: ckg , websearch
+- [] more flexible working directory 
+
 ## Contribution
 
 We welcome all types of contributions. However, please note that we are in a fast-paced development environment, and the code will evolve daily. If you're interested in collaborating, feel free to send me an email.
