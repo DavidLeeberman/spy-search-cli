@@ -14,7 +14,7 @@ type Agent struct {
 	Tools  []tools.Tool // a list of tool
 	Steps  int          // number of step allow the agent to run
 	Mmeory []string     // save the memory
-	Model  models.OllamaClient // Exported for CLI access
+	Model  models.CompletionInterface // Exported for CLI access
 	WorkDir string      // Working directory for tool execution
 }
 

@@ -33,10 +33,10 @@ type codeChange struct {
 }
 
 type settings struct {
-	model    string
-	apiKey   string
-	provider string
-	workDir  string
+	Model    string `json:"model"`
+	ApiKey   string `json:"apiKey"`
+	Provider string `json:"provider"`
+	WorkDir  string `json:"workDir"`
 }
 
 type Model struct {
@@ -142,10 +142,10 @@ const spyLogo = `
 
 func loadConfig() settings {
 	cfg := settings{
-		model:    "gpt-4",
-		apiKey:   os.Getenv("OPENAI_API_KEY"),
-		provider: "openai",
-		workDir:  "",
+		Model:    "gpt-4",
+		ApiKey:   os.Getenv("OPENAI_API_KEY"),
+		Provider: "openai",
+		WorkDir:  "",
 	}
 	data, err := ioutil.ReadFile("config.json")
 	if err == nil {
@@ -312,17 +312,17 @@ func (m Model) handleSettingsKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !m.editingSetting {
 			// Start editing
 			m.editingSetting = true
-			fields := []string{"model", "provider", "apiKey", "workDir"}
+			fields := []string{"Model", "Provider", "ApiKey", "WorkDir"}
 			var val string
 			switch m.settingsMode {
 			case 0:
-				val = m.settings.model
+				val = m.settings.Model
 			case 1:
-				val = m.settings.provider
+				val = m.settings.Provider
 			case 2:
-				val = m.settings.apiKey
+				val = m.settings.ApiKey
 			case 3:
-				val = m.settings.workDir
+				val = m.settings.WorkDir
 			}
 			m.editBuffer = val
 			m.messages = append(m.messages, dimStyle.Render("Editing: "+fields[m.settingsMode]+" (type and Ctrl+S to save, Esc to cancel)"))
@@ -334,13 +334,13 @@ func (m Model) handleSettingsKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Save edit
 			switch m.settingsMode {
 			case 0:
-				m.settings.model = m.editBuffer
+				m.settings.Model = m.editBuffer
 			case 1:
-				m.settings.provider = m.editBuffer
+				m.settings.Provider = m.editBuffer
 			case 2:
-				m.settings.apiKey = m.editBuffer
+				m.settings.ApiKey = m.editBuffer
 			case 3:
-				m.settings.workDir = m.editBuffer
+				m.settings.WorkDir = m.editBuffer
 			}
 			m.editingSetting = false
 			m.editBuffer = ""
@@ -410,8 +410,8 @@ func (m Model) handleCommand(input string) (tea.Model, tea.Cmd) {
 					},
 					Steps: 5,
 					Mmeory: []string{},
-					Model:  models.OllamaClient{},
-					WorkDir: m.settings.workDir,
+					Model:  models.NewLLMFromConfig(m.settings.Model, m.settings.ApiKey, m.settings.Provider),
+					WorkDir: m.settings.WorkDir,
 				}
 				m.waiting = true
 				m.messages = append(m.messages, agentStyle.Render("SPY AGENT")+": Starting autonomous reasoning...")
@@ -496,8 +496,8 @@ type editorCompleteMsg struct {
 
 func (m Model) callAgentChat(message string) tea.Cmd {
 	return func() tea.Msg {
-		ollama := &models.OllamaClient{}
-		resp, err := ollama.Completion(message, []tools.Tool{})
+		llm := models.NewLLMFromConfig(m.settings.Model, m.settings.ApiKey, m.settings.Provider)
+		resp, err := llm.Completion(message, []tools.Tool{})
 		if err != nil {
 			return agentResponseMsg{response: "[Error] " + err.Error()}
 		}
@@ -657,8 +657,8 @@ func (m Model) View() string {
 }
 
 func (m Model) chatView() string {
-	status := fmt.Sprintf("Model: %s | Provider: %s", m.settings.model, m.settings.provider)
-	if m.settings.apiKey != "" {
+	status := fmt.Sprintf("Model: %s | Provider: %s", m.settings.Model, m.settings.Provider)
+	if m.settings.ApiKey != "" {
 		status += " | API: OK"
 	} else {
 		status += " | API: Not configured"
@@ -732,15 +732,15 @@ func (m Model) codeReviewView() string {
 
 func (m Model) settingsView() string {
 	options := []string{
-		fmt.Sprintf("Model: %s", m.settings.model),
-		fmt.Sprintf("Provider: %s", m.settings.provider),
+		fmt.Sprintf("Model: %s", m.settings.Model),
+		fmt.Sprintf("Provider: %s", m.settings.Provider),
 		fmt.Sprintf("API Key: %s", func() string {
-			if m.settings.apiKey == "" {
+			if m.settings.ApiKey == "" {
 				return "Not set"
 			}
-			return "***" + m.settings.apiKey[len(m.settings.apiKey)-4:]
+			return "***" + m.settings.ApiKey[len(m.settings.ApiKey)-4:]
 		}()),
-		fmt.Sprintf("WorkDir: %s", m.settings.workDir),
+		fmt.Sprintf("WorkDir: %s", m.settings.WorkDir),
 	}
 
 	var renderedOptions []string
